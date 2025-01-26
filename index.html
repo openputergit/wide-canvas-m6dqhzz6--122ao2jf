@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmic Dove App</title>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .neo-box {
+            border-radius: 20px;
+            background: #e0e0e0;
+            box-shadow: 20px 20px 60px #bebebe,
+                       -20px -20px 60px #ffffff;
+        }
+        .neo-button {
+            border-radius: 10px;
+            background: #e0e0e0;
+            box-shadow: 5px 5px 10px #bebebe,
+                       -5px -5px 10px #ffffff;
+            transition: all 0.3s ease;
+        }
+        .neo-button:active {
+            box-shadow: inset 5px 5px 10px #bebebe,
+                       inset -5px -5px 10px #ffffff;
+        }
+        .neo-input {
+            border-radius: 10px;
+            background: #f0f0f0;
+            box-shadow: inset 5px 5px 10px #bebebe,
+                       inset -5px -5px 10px #ffffff;
+        }
+        body {
+            background-color: #e0e0e0;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4">
+    <div x-data="cosmicApp()" class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="neo-box p-6 mb-8">
+            <h1 class="text-3xl font-bold text-gray-700 text-center">Cosmic Dove</h1>
+            <p class="text-gray-600 text-center mt-2">Your Universal Data Manager</p>
+        </div>
+
+        <!-- Main Content -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Data Input Form -->
+            <div class="neo-box p-6">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Add New Entry</h2>
+                <form @submit.prevent="createEntry" class="space-y-4">
+                    <div>
+                        <label class="block text-gray-600 mb-2">Title</label>
+                        <input type="text" x-model="newEntry.title" class="neo-input w-full p-3 outline-none" required>
+                    </div>
+                    <div>
+                        <label class="block text-gray-600 mb-2">Description</label>
+                        <textarea x-model="newEntry.description" class="neo-input w-full p-3 outline-none h-32" required></textarea>
+                    </div>
+                    <button type="submit" class="neo-button w-full p-3 text-gray-700 font-semibold hover:bg-gray-100">
+                        <span x-show="!loading">Add Entry</span>
+                        <span x-show="loading" class="flex items-center justify-center">
+                            <i class="bi bi-arrow-repeat animate-spin mr-2"></i> Processing...
+                        </span>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Data Display -->
+            <div class="neo-box p-6">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Entries</h2>
+                <div class="space-y-4" x-show="!loading">
+                    <template x-for="entry in entries" :key="entry._id">
+                        <div class="neo-box p-4">
+                            <h3 x-text="entry.title" class="text-lg font-semibold text-gray-700"></h3>
+                            <p x-text="entry.description" class="text-gray-600 mt-2"></p>
+                            <div class="flex gap-2 mt-4">
+                                <button @click="deleteEntry(entry._id)" class="neo-button px-4 py-2 text-red-600">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                                <button @click="editEntry(entry)" class="neo-button px-4 py-2 text-blue-600">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                <div x-show="loading" class="flex justify-center p-4">
+                    <i class="bi bi-arrow-repeat animate-spin text-4xl text-gray-600"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Modal -->
+        <div x-show="showEditModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+            <div class="neo-box p-6 w-full max-w-md">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Edit Entry</h2>
+                <form @submit.prevent="updateEntry" class="space-y-4">
+                    <div>
+                        <label class="block text-gray-600 mb-2">Title</label>
+                        <input type="text" x-model="editingEntry.title" class="neo-input w-full p-3 outline-none" required>
+                    </div>
+                    <div>
+                        <label class="block text-gray-600 mb-2">Description</label>
+                        <textarea x-model="editingEntry.description" class="neo-input w-full p-3 outline-none h-32" required></textarea>
+                    </div>
+                    <div class="flex gap-4">
+                        <button type="submit" class="neo-button flex-1 p-3 text-gray-700 font-semibold hover:bg-gray-100">Update</button>
+                        <button @click="showEditModal = false" type="button" class="neo-button flex-1 p-3 text-gray-700 font-semibold hover:bg-gray-100">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function cosmicApp() {
+            return {
+                entries: [],
+                newEntry: {
+                    title: '',
+                    description: ''
+                },
+                editingEntry: null,
+                showEditModal: false,
+                loading: false,
+                appSlug: 'cosmic-dove-' + Math.random().toString(36).substr(2, 9),
+
+                async init() {
+                    await this.fetchEntries();
+                },
+
+                async fetchEntries() {
+                    this.loading = true;
+                    try {
+                        const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/mongodb', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': 'Bearer HpacF1ehRUbJil8rVl2nhjeGU3k1'
+                            },
+                            body: JSON.stringify({
+                                appSlug: this.appSlug,
+                                action: 'read',
+                                collection: 'entries'
+                            })
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            this.entries = data.result.read || [];
+                        }
+                    } catch (error) {
+                        console.error('Error fetching entries:', error);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async createEntry() {
+                    this.loading = true;
+                    try {
+                        const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/mongodb', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': 'Bearer HpacF1ehRUbJil8rVl2nhjeGU3k1'
+                            },
+                            body: JSON.stringify({
+                                appSlug: this.appSlug,
+                                action: 'create',
+                                collection: 'entries',
+                                data: this.newEntry
+                            })
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            await this.fetchEntries();
+                            this.newEntry.title = '';
+                            this.newEntry.description = '';
+                        }
+                    } catch (error) {
+                        console.error('Error creating entry:', error);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                editEntry(entry) {
+                    this.editingEntry = { ...entry };
+                    this.showEditModal = true;
+                },
+
+                async updateEntry() {
+                    this.loading = true;
+                    try {
+                        const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/mongodb', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': 'Bearer HpacF1ehRUbJil8rVl2nhjeGU3k1'
+                            },
+                            body: JSON.stringify({
+                                appSlug: this.appSlug,
+                                action: 'update',
+                                collection: 'entries',
+                                id: this.editingEntry._id,
+                                data: {
+                                    title: this.editingEntry.title,
+                                    description: this.editingEntry.description
+                                }
+                            })
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            await this.fetchEntries();
+                            this.showEditModal = false;
+                        }
+                    } catch (error) {
+                        console.error('Error updating entry:', error);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async deleteEntry(id) {
+                    if (!confirm('Are you sure you want to delete this entry?')) return;
+                    
+                    this.loading = true;
+                    try {
+                        const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/mongodb', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': 'Bearer HpacF1ehRUbJil8rVl2nhjeGU3k1'
+                            },
+                            body: JSON.stringify({
+                                appSlug: this.appSlug,
+                                action: 'delete',
+                                collection: 'entries',
+                                id: id
+                            })
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            await this.fetchEntries();
+                        }
+                    } catch (error) {
+                        console.error('Error deleting entry:', error);
+                    } finally {
+                        this.loading = false;
+                    }
+                }
+            }
+        }
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
